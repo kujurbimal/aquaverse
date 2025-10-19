@@ -1,0 +1,123 @@
+<!doctype html>
+<html>
+<head>
+<meta charset='utf-8'>
+<meta name='viewport' content='width=device-width, initial-scale=1'>
+<title>AquaVerse - Aquarium Enthusiasts</title>
+<style>
+body{font-family:Inter,Arial,sans-serif;background:#f3f7f9;margin:0;padding:0}
+header{background:#0b6e4f;color:white;padding:18px;text-align:center}
+.container{max-width:1000px;margin:20px auto;padding:0 16px}
+.card{background:white;padding:16px;border-radius:10px;box-shadow:0 6px 18px rgba(0,0,0,0.06);margin-bottom:16px}
+.row{display:flex;gap:12px}
+input,textarea,select{width:100%;padding:8px;border:1px solid #ddd;border-radius:6px}
+button{background:#0b6e4f;color:white;border:none;padding:10px 14px;border-radius:6px;cursor:pointer}
+.post{border-bottom:1px solid #eee;padding:12px 0}
+.muted{color:#666;font-size:0.9rem}
+</style>
+</head>
+<body>
+<header><h1>AquaVerse</h1><div class='muted'>A community for aquarium enthusiasts</div></header>
+<div class='container'>
+
+<div class='card' id='create-post'>
+  <h3>Create Post</h3>
+  <input id='username' placeholder='Username (create if new)' />
+  <textarea id='caption' rows='3' placeholder='Caption...'></textarea>
+  <input id='image_url' placeholder='Image URL (optional)' />
+  <button onclick='createPost()'>Post</button>
+</div>
+
+<div class='card' id='feed'>
+  <h3>Community Feed</h3>
+  <div id='posts'></div>
+</div>
+
+<div class='card'>
+  <h3>Tank Log</h3>
+  <div class='row'>
+    <input id='log_user' placeholder='Username' />
+    <input id='temp' placeholder='Temperature (°C)' />
+    <input id='ph' placeholder='pH' />
+  </div>
+  <textarea id='notes' rows='2' placeholder='Notes (e.g., water change)'></textarea>
+  <button onclick='createLog()'>Save Log</button>
+  <div id='logs'></div>
+</div>
+
+<div class='card'>
+  <h3>Marketplace (sample)</h3>
+  <div id='products'></div>
+</div>
+
+</div>
+
+<script>
+const API = 'http://localhost:8000';
+
+async function createUserIfNeeded(username){
+  if(!username) return null;
+  // try list users to see if exists
+  const users = await fetch(API + '/users').then(r=>r.json());
+  let u = users.find(x=>x.username===username);
+  if(u) return u;
+  const resp = await fetch(API + '/users', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({username: username})});
+  return resp.json();
+}
+
+async function createPost(){
+  const username = document.getElementById('username').value.trim();
+  const caption = document.getElementById('caption').value.trim();
+  const image_url = document.getElementById('image_url').value.trim();
+  if(!username || !caption) { alert('Please enter username and caption'); return; }
+  const user = await createUserIfNeeded(username);
+  const body = { user_id: user.id, caption: caption, image_url: image_url };
+  await fetch(API + '/posts', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+  loadPosts();
+  document.getElementById('caption').value=''; document.getElementById('image_url').value='';
+}
+
+async function loadPosts(){
+  const posts = await fetch(API + '/posts').then(r=>r.json());
+  const container = document.getElementById('posts');
+  container.innerHTML = '';
+  posts.forEach(p=>{
+    const el = document.createElement('div'); el.className='post';
+    el.innerHTML = `<strong>${p.user_id}</strong> <div class='muted'>${new Date(p.created_at).toLocaleString()}</div><p>${p.caption}</p>` + (p.image_url?`<img src='${p.image_url}' style='max-width:100%;border-radius:8px'/>`: '');
+    container.appendChild(el);
+  });
+}
+
+async function createLog(){
+  const username = document.getElementById('log_user').value.trim();
+  const temp = parseFloat(document.getElementById('temp').value);
+  const ph = parseFloat(document.getElementById('ph').value);
+  const notes = document.getElementById('notes').value.trim();
+  if(!username) { alert('Enter username'); return; }
+  const user = await createUserIfNeeded(username);
+  const body = { user_id: user.id, temperature_c: isNaN(temp)?null:temp, ph: isNaN(ph)?null:ph, notes: notes };
+  await fetch(API + '/tank_logs', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+  loadLogs(user.id);
+  document.getElementById('notes').value='';
+}
+
+async function loadLogs(user_id){
+  if(!user_id) return;
+  const logs = await fetch(API + '/tank_logs/'+user_id).then(r=>r.json());
+  const el = document.getElementById('logs'); el.innerHTML='';
+  logs.forEach(l=>{
+    const d = document.createElement('div'); d.className='muted'; d.innerText = `${new Date(l.created_at).toLocaleString()} - Temp:${l.temperature_c||'-'}°C pH:${l.ph||'-'} Notes:${l.notes||''}`; el.appendChild(d);
+  });
+}
+
+async function loadProducts(){
+  const products = await fetch(API + '/products').then(r=>r.json());
+  const el = document.getElementById('products'); el.innerHTML='';
+  products.forEach(p=>{ const d = document.createElement('div'); d.innerHTML = `<strong>${p.name}</strong> - $${p.price_usd}<div class='muted'>${p.description}</div>`; el.appendChild(d); });
+}
+
+// initial load
+loadPosts(); loadProducts();
+</script>
+</body>
+</html>
